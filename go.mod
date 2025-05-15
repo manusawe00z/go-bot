@@ -1,6 +1,6 @@
 module go-bot
 
-go 1.23.0
+go 1.22
 
 require (
 	github.com/bwmarrin/dgvoice v0.0.0-20210225172318-caaac756e02e
