@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/signal"
 
-	"gobot/internal/bot"
+	"go-bot/internal/bot"
 )
 
 func main() {
