@@ -29,6 +29,11 @@ func GetCommands() []*Command {
 			Description: "Leave the voice channel",
 			Handler:     HandleLeave,
 		},
+		{
+			Name:        "skip",
+			Description: "Skip the current TTS message",
+			Handler:     HandleSkip,
+		},
 	}
 }
 

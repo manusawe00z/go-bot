@@ -2,6 +2,7 @@ package voice
 
 import (
 	"sync"
+	"time"
 
 	"go-bot/internal/logging"
 	"go-bot/internal/tts"
@@ -83,10 +84,31 @@ func handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		text := ProcessText(m.Content)
 		logging.Info("TTS text: %s", text)
 
+		// Get or create the skip signal channel for this guild
+		skipChan := GetSkipChannel(m.GuildID)
+		skipDetected := false
+
+		// Start a goroutine to listen for skip signals during TTS playback
+		go func() {
+			select {
+			case <-skipChan:
+				skipDetected = true
+				logging.Info("Skip signal received for guild %s", m.GuildID)
+			case <-time.After(5 * time.Minute): // Safety timeout
+				// Do nothing, just a safety measure
+			}
+		}()
+
 		// Generate and play audio
 		if err := tts.SpeakText(text, vc); err != nil {
 			logging.Error("TTS failed: %v", err)
 			return
+		}
+
+		if skipDetected {
+			logging.Info("TTS playback was skipped")
+		} else {
+			logging.Debug("TTS playback completed normally")
 		}
 
 		// Delete the message that was read

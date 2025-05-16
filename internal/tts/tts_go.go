@@ -71,15 +71,16 @@ func SpeakText(text string, vc *discordgo.VoiceConnection) error {
 		return fmt.Errorf("failed to generate TTS audio: %w (output: %s)", err, string(output))
 	}
 
+	// Create an audio session for this guild
+	session := CreateAudioSession(vc.GuildID, vc)
+
 	// Play the audio file
 	logging.Info("Starting to play audio...")
-	done := make(chan bool)
-	go func() {
-		defer close(done)
-		dgvoice.PlayAudioFile(vc, outputFile, done)
-	}()
-	<-done
+	dgvoice.PlayAudioFile(vc, outputFile, session.StopChan)
 	logging.Info("Audio playback finished.")
+
+	// Clean up the session
+	RemoveAudioSession(vc.GuildID)
 
 	return nil
 }

@@ -45,3 +45,23 @@ func HandleLeave(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 		},
 	})
 }
+
+// HandleSkip handles the skip command
+func HandleSkip(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	// Try to skip current message
+	err := voice.SkipCurrentMessage(i.GuildID)
+
+	var responseContent string
+	if err != nil {
+		responseContent = fmt.Sprintf("Error: %v", err)
+	} else {
+		responseContent = "Skipped current message!"
+	}
+
+	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: responseContent,
+		},
+	})
+}
