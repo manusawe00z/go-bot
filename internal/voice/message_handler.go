@@ -81,7 +81,8 @@ func handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	// Process message content if not empty
 	if m.Content != "" {
-		text := ProcessText(m.Content)
+		// Apply both standard and user-specific text transformations
+		text := ProcessUserText(m.Content, m.Author.ID)
 		logging.Info("TTS text: %s", text)
 
 		// Get or create the skip signal channel for this guild

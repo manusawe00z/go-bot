@@ -34,6 +34,21 @@ func GetCommands() []*Command {
 			Description: "Skip the current TTS message",
 			Handler:     HandleSkip,
 		},
+		{
+			Name:        "hate",
+			Description: "Add a user to the special TTS transformation list",
+			Handler:     HandleHate,
+		},
+		{
+			Name:        "unhate",
+			Description: "Remove a user from the special TTS transformation list",
+			Handler:     HandleUnhate,
+		},
+		{
+			Name:        "hatelist",
+			Description: "Show all users in the special TTS transformation list",
+			Handler:     HandleHateList,
+		},
 	}
 }
 
@@ -43,10 +58,27 @@ func RegisterCommands(s *discordgo.Session) error {
 	discordCommands := make([]*discordgo.ApplicationCommand, len(commands))
 
 	for i, cmd := range commands {
-		discordCommands[i] = &discordgo.ApplicationCommand{
+		// Create the base command
+		discordCommand := &discordgo.ApplicationCommand{
 			Name:        cmd.Name,
 			Description: cmd.Description,
 		}
+
+		// Add command-specific options
+		switch cmd.Name {
+		case "hate", "unhate":
+			// Add a required user option for the hate/unhate commands
+			discordCommand.Options = []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionUser,
+					Name:        "user",
+					Description: "The user to target",
+					Required:    true,
+				},
+			}
+		}
+
+		discordCommands[i] = discordCommand
 	}
 
 	// Register commands for each guild
