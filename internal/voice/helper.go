@@ -36,3 +36,12 @@ func ProcessText(text string) string {
 
 	return text
 }
+
+// ProcessUserText applies text transformations based on user and message content
+func ProcessUserText(text string, userID string) string {
+	// First apply standard text transformations
+	transformedText := ProcessText(text)
+
+	// Then apply user-specific transformations if applicable
+	return ApplyUserSpecificTransformations(transformedText, userID)
+}
