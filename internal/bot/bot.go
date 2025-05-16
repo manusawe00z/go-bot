@@ -1,150 +1,156 @@
 package bot
 
 import (
+	"context"
 	"fmt"
-	"os"
+	"time"
+
+	"go-bot/internal/commands"
+	"go-bot/internal/config"
+	"go-bot/internal/http"
+	"go-bot/internal/logging"
+	"go-bot/internal/voice"
 
 	"github.com/bwmarrin/discordgo"
 )
 
+// Bot represents the Discord bot
 type Bot struct {
-	Session *discordgo.Session
+	Session    *discordgo.Session
+	Config     *config.Config
+	HttpServer *http.Server
 }
 
+// NewBot creates a new bot instance
 func NewBot() (*Bot, error) {
-	botToken := os.Getenv("DISCORD_TOKEN")
-	if botToken == "" {
-		return nil, fmt.Errorf("DISCORD_TOKEN environment variable not set")
-	}
-	session, err := discordgo.New("Bot " + botToken)
-	if err != nil {
-		return nil, err
+	// Load configuration
+	cfg := config.LoadConfig()
+	// Initialize logging
+	if err := logging.Setup(cfg.LogLevel); err != nil {
+		return nil, fmt.Errorf("failed to set up logging: %w", err)
 	}
 
-	bot := &Bot{Session: session}
-	session.AddHandler(bot.messageCreate)
+	// Initialize message logging
+	if err := logging.SetupMessageLogger(); err != nil {
+		return nil, fmt.Errorf("failed to set up message logging: %w", err)
+	}
+
+	// Validate Discord token
+	if cfg.DiscordToken == "" {
+		return nil, fmt.Errorf("DISCORD_TOKEN environment variable not set")
+	}
+	// Create Discord session
+	session, err := discordgo.New("Bot " + cfg.DiscordToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Discord session: %w", err)
+	}
+
+	// Enable the message content intent - required to read message contents
+	session.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsGuildVoiceStates | discordgo.IntentsMessageContent
+
+	// Create HTTP server for health checks
+	httpServer := http.NewServer(8080)
+
+	// Create bot
+	bot := &Bot{
+		Session:    session,
+		Config:     cfg,
+		HttpServer: httpServer,
+	}
+	// Add message handler
+	session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		// Skip messages from self
+		if m.Author.ID == s.State.User.ID {
+			return
+		}
+		// Log incoming message
+		logging.Info("MSG: Guild: (%s), Channel: (%s), User: '%s#%s' (%s): %s",
+			m.GuildID, m.ChannelID,
+			m.Author.Username, m.Author.Discriminator, m.Author.ID,
+			m.Content)
+
+		voice.ProcessMessage(s, m)
+	})
+
+	// Add interaction handler for slash commands
+	session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		bot.handleInteraction(s, i)
+	})
+
 	return bot, nil
 }
 
+// Start starts the bot
 func (b *Bot) Start() error {
-	// เปิดการเชื่อมต่อกับ Discord Gateway
-	err := b.Session.Open()
-	if err != nil {
-		return err
+	// Start HTTP server for health checks
+	b.HttpServer.Start()
+
+	// Open connection to Discord
+	logging.Info("Starting bot...")
+	if err := b.Session.Open(); err != nil {
+		return fmt.Errorf("failed to open Discord connection: %w", err)
 	}
 
-	// ลบคำสั่งเก่าก่อนลงทะเบียนใหม่
-	err = b.ClearCommands()
-	if err != nil {
-		return err
+	// Clear and register commands
+	if err := commands.ClearCommands(b.Session); err != nil {
+		logging.Warn("Failed to clear commands: %v", err)
 	}
 
-	// ลงทะเบียน Slash Commands หลังจากเปิดการเชื่อมต่อสำเร็จ
-	err = b.RegisterCommands()
-	if err != nil {
-		return err
+	if err := commands.RegisterCommands(b.Session); err != nil {
+		return fmt.Errorf("failed to register commands: %w", err)
 	}
 
-	b.Session.AddHandler(b.InteractionCreate)
+	logging.Info("Bot is now running")
 	return nil
 }
 
+// Stop stops the bot
 func (b *Bot) Stop() {
+	logging.Info("Shutting down bot...")
+
+	// Close Discord connection
 	b.Session.Close()
-}
 
-func (b *Bot) RegisterCommands() error {
-	commands := []*discordgo.ApplicationCommand{
-		{
-			Name:        "join",
-			Description: "ให้บอทเข้าร่วมห้องเสียง",
-		},
-		{
-			Name:        "leave",
-			Description: "ให้บอทออกจากห้องเสียง",
-		},
+	// Gracefully shutdown HTTP server
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := b.HttpServer.Stop(ctx); err != nil {
+		logging.Error("Error shutting down HTTP server: %v", err)
 	}
 
-	// ดึง Guild ID จากเซิร์ฟเวอร์ที่บอทเข้าร่วม
-	for _, guild := range b.Session.State.Guilds {
-		fmt.Printf("Registering commands for guild: %s (%s)\n", guild.Name, guild.ID)
-		for _, cmd := range commands {
-			_, err := b.Session.ApplicationCommandCreate(b.Session.State.User.ID, guild.ID, cmd)
-			if err != nil {
-				return fmt.Errorf("cannot create '%s' command for guild %s: %v", cmd.Name, guild.Name, err)
+	logging.CloseMessageLogger()
+	logging.Close()
+}
+
+// handleInteraction processes slash commands
+func (b *Bot) handleInteraction(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// Skip non-command interactions
+	if i.Type != discordgo.InteractionApplicationCommand {
+		return
+	}
+
+	commandName := i.ApplicationCommandData().Name
+	logging.Info("Received command: %s", commandName)
+
+	// Find and execute command
+	for _, cmd := range commands.GetCommands() {
+		if cmd.Name == commandName {
+			if err := cmd.Handler(s, i); err != nil {
+				logging.Error("Error handling command %s: %v", commandName, err)
+
+				// Respond with error message
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("Error: %v", err),
+					},
+				})
 			}
+			return
 		}
 	}
 
-	return nil
-}
-
-func (b *Bot) ClearCommands() error {
-	commands, err := b.Session.ApplicationCommands(b.Session.State.User.ID, "")
-	if err != nil {
-		return fmt.Errorf("cannot fetch commands: %v", err)
-	}
-
-	for _, cmd := range commands {
-		err := b.Session.ApplicationCommandDelete(b.Session.State.User.ID, "", cmd.ID)
-		if err != nil {
-			return fmt.Errorf("cannot delete '%s' command: %v", cmd.Name, err)
-		}
-	}
-
-	fmt.Println("All commands cleared.")
-	return nil
-}
-
-func (b *Bot) InteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	switch i.ApplicationCommandData().Name {
-	case "join":
-		err := b.handleJoinCommand(s, i)
-		if err != nil {
-			fmt.Println("Error handling join command:", err)
-		}
-	case "leave":
-		err := b.handleLeaveCommand(s, i)
-		if err != nil {
-			fmt.Println("Error handling leave command:", err)
-		}
-	}
-}
-
-func (b *Bot) handleJoinCommand(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	vc, err := b.joinUserVoice(s, i.GuildID, i.Member.User.ID)
-	if err != nil {
-		return err
-	}
-	voiceConnections[i.GuildID] = vc
-
-	// ตอบกลับคำสั่ง
-	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: "Joined the voice channel!",
-		},
-	})
-}
-
-func (b *Bot) handleLeaveCommand(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	vc, ok := voiceConnections[i.GuildID]
-	if !ok || vc == nil || vc.ChannelID == "" {
-		return fmt.Errorf("bot is not in a voice channel")
-	}
-
-	err := vc.Disconnect()
-	if err != nil {
-		return err
-	}
-
-	delete(voiceConnections, i.GuildID)
-
-	// ตอบกลับคำสั่ง
-	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: "Left the voice channel!",
-		},
-	})
+	// Command not found
+	logging.Warn("Unknown command: %s", commandName)
 }

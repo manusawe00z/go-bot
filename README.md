@@ -3,73 +3,84 @@
 Discord Voice Bot with TTS (Text-to-Speech)
 
 ## Features
+
 - Join Discord voice channels
-- Convert text messages to speech using gTTS (Google Text-to-Speech)
+- Convert text messages to speech using gTTS
 - Play TTS audio in voice channels
+- Support for multiple languages
+- Message queue system
+- Structured logging
+- Health check system for container orchestration
 
-## Requirements
-- Go 1.22+
-- Python 3.11+
-- [gtts](https://pypi.org/project/gTTS/) Python package
-- ffmpeg
-- Discord Bot Token
+## Quick Start with Docker Compose
 
-## Getting Started
-
-### 1. Clone the repository
-```sh
+1. Clone the repository:
+```bash
 git clone https://github.com/manusawe00z/go-bot
 cd go-bot
 ```
 
-### 2. Set up environment variables
-Create a `.env` file or set the environment variable `DISCORD_TOKEN` with your Discord bot token.
-
-### 3. Install Python dependencies
-```sh
-pip install -r requirements.txt
+2. Create and configure your environment file:
+```bash
+cp env.example .env
+# Edit .env with your Discord token and preferences
 ```
 
-### 4. Build the Go application
-```sh
-go build -o app ./cmd/main.go
+3. Start the bot with Docker Compose:
+```bash
+docker-compose up -d
 ```
 
-### 5. Run the bot (local)
-```sh
-DISCORD_TOKEN=your_token_here ./app
+4. View logs:
+```bash
+docker-compose logs -f
 ```
 
-### 6. Run with Docker
-Build and run the container:
-```sh
-docker build -t go-bot .
-docker run -e DISCORD_TOKEN=your_token_here go-bot
+5. To stop the bot:
+```bash
+docker-compose down
 ```
 
-## Deploy to Railway
-1. Push your code to GitHub
-2. Connect your repo to [Railway](https://railway.app)
-3. Set the `DISCORD_TOKEN` variable in Railway's dashboard
-4. Deploy (Railway will use the provided Dockerfile)
+## Docker Compose Configuration
 
-## File Structure
-```
-├── cmd/main.go           # Entry point
-├── internal/bot/         # Bot logic
-│   ├── bot.go
-│   ├── voice.go
-│   └── ...
-├── internal/tts/tts.py   # TTS Python script
-├── requirements.txt      # Python dependencies
-├── Dockerfile            # Multi-stage build for Go + Python + ffmpeg
-├── go.mod, go.sum        # Go dependencies
+The project uses a single `docker-compose.yml` file with profiles for different environments
+
+## Configuration Options
+
+Main environment variables (set in .env file):
+
+- `DISCORD_TOKEN` - Your Discord bot token (required)
+- `COMMAND_PREFIX` - Prefix for commands (default: !)
+- `TTS_LANGUAGE` - Default language for TTS (default: en)
+- `QUEUE_SIZE` - Maximum size of message queue (default: 100)
+- `AUDIO_QUALITY` - Audio quality (low/medium/high) (default: medium)
+- `LOG_LEVEL` - Log level (0=debug to 4=fatal) (default: 1)
+
+## Health Check System
+
+The bot includes an HTTP server that provides a health check endpoint at:
+
+```http
+http://localhost:8080/health
 ```
 
-## Notes
-- Ensure your bot has permission to join and speak in voice channels.
-- ffmpeg is required for audio processing.
-- gTTS requires internet access to generate speech.
+This endpoint returns:
+
+- HTTP 200 status when the bot is running properly
+- JSON response with status, timestamp, and version information
+
+The health check is configured in Docker Compose file to support container orchestration:
+
+- Development profile: Every 15 seconds
+- Production profile: Every 30 seconds
+
+## Requirements (for manual installation)
+
+- Go 1.22+
+- Python 3.11+
+- gtts Python package
+- ffmpeg
 
 ## License
+
 MIT
