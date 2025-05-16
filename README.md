@@ -18,7 +18,7 @@ Discord Voice Bot with TTS (Text-to-Speech)
 
 ### 1. Clone the repository
 ```sh
-git clone <your-repo-url>
+git clone https://github.com/manusawe00z/go-bot
 cd go-bot
 ```
 
