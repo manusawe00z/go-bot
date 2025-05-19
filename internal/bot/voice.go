@@ -6,7 +6,6 @@ import (
 	"regexp" // เพิ่ม import สำหรับ regex
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
@@ -79,21 +78,50 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		// เล่นเสียงและรอให้การเล่นจบ
 		fmt.Println("Starting to play audio...")
-		done := make(chan bool)
-		go func(isMuklock bool) {
-			defer close(done)
-			if isMuklock {
-				dgvoice.PlayAudioFile(vc, "tts.mp3", done)
-				time.Sleep(1* time.Second)
+		var wg sync.WaitGroup
+
+		if isMuklock {
+			// Play muklock response first
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				done := make(chan bool)
 				dgvoice.PlayAudioFile(vc, "response-muklock.mp3", done)
-				time.Sleep(1 * time.Second)
-				dgvoice.PlayAudioFile(vc, "tlktbmuk.mp3", done)
-			} else {
+				<-done
+			}()
+			wg.Wait()
+
+			// Then play the original TTS
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				done := make(chan bool)
 				dgvoice.PlayAudioFile(vc, "tts.mp3", done)
-			}
-		}(isMuklock)
-		<-done
-		
+				<-done
+			}()
+			wg.Wait()
+
+			// Finally play the muklock sound effect
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				done := make(chan bool)
+				dgvoice.PlayAudioFile(vc, "tlktbmuk.mp3", done)
+				<-done
+			}()
+			wg.Wait()
+		} else {
+			// Play normal TTS
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				done := make(chan bool)
+				dgvoice.PlayAudioFile(vc, "tts.mp3", done)
+				<-done
+			}()
+			wg.Wait()
+		}
+
 		fmt.Println("Audio playback finished.")
 
 		// ลบข้อความที่อ่านไปแล้ว
