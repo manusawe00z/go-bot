@@ -58,16 +58,6 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		text := m.Content
 		responseMuklock, isMuklock := muklock(text)
 		fmt.Println("TTS text:", responseMuklock)
-
-		if isMuklock {
-			cmd := exec.Command("python3", "internal/tts/response-muklock.py", responseMuklock)
-			err := cmd.Run()
-			if err != nil {
-				fmt.Println("TTS failed:", err)
-				return
-			}
-		}
-
 		// สร้างไฟล์เสียงจาก gTTS
 		cmd := exec.Command("python3", "internal/tts/tts.py", text)
 		err := cmd.Run()
@@ -75,52 +65,36 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 			fmt.Println("TTS failed:", err)
 			return
 		}
-
+		if isMuklock {
+			// สร้างไฟล์เสียงจาก gTTS
+			cmd := exec.Command("python3", "internal/tts/response-muklock.pyÍ", responseMuklock)
+			err := cmd.Run()
+			if err != nil {
+				fmt.Println("TTS failed:", err)
+				return
+			}
+		}
 		// เล่นเสียงและรอให้การเล่นจบ
 		fmt.Println("Starting to play audio...")
-		var wg sync.WaitGroup
 
 		if isMuklock {
-
 			// Then play the original TTS
-			wg.Add(1)
 			go func() {
-				defer wg.Done()
 				done := make(chan bool)
 				dgvoice.PlayAudioFile(vc, "tts.mp3", done)
-				<-done
-			}()
-			wg.Wait()
-
-			// Play muklock response first
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				done := make(chan bool)
 				dgvoice.PlayAudioFile(vc, "response-muklock.mp3", done)
-				<-done
-			}()
-			wg.Wait()
-
-			// Finally play the muklock sound effect
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				done := make(chan bool)
 				dgvoice.PlayAudioFile(vc, "tlktbmuk.mp3", done)
 				<-done
 			}()
-			wg.Wait()
+
+			// Finally play the muklock sound effect
 		} else {
 			// Play normal TTS
-			wg.Add(1)
 			go func() {
-				defer wg.Done()
 				done := make(chan bool)
 				dgvoice.PlayAudioFile(vc, "tts.mp3", done)
 				<-done
 			}()
-			wg.Wait()
 		}
 
 		fmt.Println("Audio playback finished.")
@@ -145,7 +119,7 @@ func (b *Bot) joinUserVoice(s *discordgo.Session, guildID, userID string) (*disc
 	for _, vs := range guild.VoiceStates {
 		if vs.UserID == userID {
 			// ตั้งค่า mute และ deaf เป็น true เพื่อปิดเสียงเข้าและออกของบอท
-			return s.ChannelVoiceJoin(guildID, vs.ChannelID, true, true)
+			return s.ChannelVoiceJoin(guildID, vs.ChannelID, false, false)
 		}
 	}
 
