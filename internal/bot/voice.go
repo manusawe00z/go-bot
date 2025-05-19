@@ -81,15 +81,6 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		var wg sync.WaitGroup
 
 		if isMuklock {
-			// Play muklock response first
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				done := make(chan bool)
-				dgvoice.PlayAudioFile(vc, "response-muklock.mp3", done)
-				<-done
-			}()
-			wg.Wait()
 
 			// Then play the original TTS
 			wg.Add(1)
@@ -97,6 +88,16 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 				defer wg.Done()
 				done := make(chan bool)
 				dgvoice.PlayAudioFile(vc, "tts.mp3", done)
+				<-done
+			}()
+			wg.Wait()
+
+			// Play muklock response first
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				done := make(chan bool)
+				dgvoice.PlayAudioFile(vc, "response-muklock.mp3", done)
 				<-done
 			}()
 			wg.Wait()
