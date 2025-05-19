@@ -6,6 +6,7 @@ import (
 	"regexp" // เพิ่ม import สำหรับ regex
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
@@ -55,8 +56,18 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	// อ่านข้อความในแชนแนลและพูด
 	if m.Content != "" {
-		text := muklock(m.Content)
-		fmt.Println("TTS text:", text)
+		text := m.Content
+		responseMuklock, isMuklock := muklock(text)
+		fmt.Println("TTS text:", responseMuklock)
+
+		if isMuklock {
+			cmd := exec.Command("python3", "internal/tts/response-muklock.py", responseMuklock)
+			err := cmd.Run()
+			if err != nil {
+				fmt.Println("TTS failed:", err)
+				return
+			}
+		}
 
 		// สร้างไฟล์เสียงจาก gTTS
 		cmd := exec.Command("python3", "internal/tts/tts.py", text)
@@ -69,11 +80,20 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// เล่นเสียงและรอให้การเล่นจบ
 		fmt.Println("Starting to play audio...")
 		done := make(chan bool)
-		go func() {
+		go func(isMuklock bool) {
 			defer close(done)
-			dgvoice.PlayAudioFile(vc, "tts.mp3", done)
-		}()
+			if isMuklock {
+				dgvoice.PlayAudioFile(vc, "tts.mp3", done)
+				time.Sleep(1* time.Second)
+				dgvoice.PlayAudioFile(vc, "response-muklock.mp3", done)
+				time.Sleep(1 * time.Second)
+				dgvoice.PlayAudioFile(vc, "tlktbmuk.mp3", done)
+			} else {
+				dgvoice.PlayAudioFile(vc, "tts.mp3", done)
+			}
+		}(isMuklock)
 		<-done
+		
 		fmt.Println("Audio playback finished.")
 
 		// ลบข้อความที่อ่านไปแล้ว
@@ -103,14 +123,14 @@ func (b *Bot) joinUserVoice(s *discordgo.Session, guildID, userID string) (*disc
 	return nil, fmt.Errorf("user is not in a voice channel")
 }
 
-func muklock(text string) string {
+func muklock(text string) (string, bool) {
 	switch text {
 	case "สีเหลือง":
-		return "เย็นโล่"
+		return "เย็นโล่", true
 	case "มีด":
-		return "อีโต้"
+		return "อีโต้", true
 	case "ชุดชั้นใน":
-		return "วาโก้"
+		return "วาโก้", true
 	}
-	return text
+	return text, false
 }
