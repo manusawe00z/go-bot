@@ -67,7 +67,7 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 		if isMuklock {
 			// สร้างไฟล์เสียงจาก gTTS
-			cmd := exec.Command("python3", "internal/tts/response-muklock.pyÍ", responseMuklock)
+			cmd := exec.Command("python3", "internal/tts/response-muklock.py", responseMuklock)
 			err := cmd.Run()
 			if err != nil {
 				fmt.Println("TTS failed:", err)
